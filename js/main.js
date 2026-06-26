@@ -14,14 +14,14 @@ import { PoseEngine } from "./engine.js";
 import * as ui from "./ui.js";
 
 import freezeDance from "./games/freeze-dance.js";
-import photoBooth from "./games/photo-booth.js";
+import princess from "./games/princess.js";
 import copyPose from "./games/copy-pose.js";
 import popHearts from "./games/pop-hearts.js";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const PARTY_NAME = "Melina"; // ← change this to reuse for another party
 
-const GAMES = [freezeDance, photoBooth, copyPose, popHearts];
+const GAMES = [freezeDance, princess, copyPose, popHearts];
 const GAME_BY_ID = Object.fromEntries(GAMES.map((g) => [g.id, g]));
 
 const stage = document.getElementById("stage");

@@ -13,7 +13,7 @@ Everything runs **locally in the browser** — the kids' video never leaves the 
 | Game | What to do |
 |------|-----------|
 | ⏯️ **Freeze Dance** | Dance to your music; freeze when the screen says FREEZE! Movers get a funny wobble — nobody is ever really out. |
-| 📸 **Idol Photo Booth** | 3-2-1 → snap a neon group photo. Keep saves it to the PC. |
+| 👑 **Princess Magic** | Step in front of the camera and you turn into a princess — a crown, a sparkly gown, and a magic wand follow you live as you move. |
 | 🕺 **Copy the Pose** | Match the pose on screen; everyone gets a score. |
 | 💖 **Pop the Hearts** | Pop floating hearts with your hands for a team score. |
 
@@ -75,7 +75,6 @@ Switch games anytime with the **⬅ Menu** button or the **Esc** key.
   `file://` URLs. Nothing is uploaded anywhere; no accounts, no backend.
 - The engine **auto-tunes performance** (resolution + detection rate) for older
   PCs, and falls back from GPU (WebGL) to CPU if needed.
-- Saved photos download to the PC's Downloads folder as `idol-photo-NN.png`.
 
 ## 🧪 Tests
 

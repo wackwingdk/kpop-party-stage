@@ -139,3 +139,38 @@ export function headPoint(kp) {
   }
   return null;
 }
+
+// Distance between the shoulders — our unit for scaling decorations so a girl
+// closer to the camera (bigger on screen) gets proportionally bigger crown/gown.
+// Returns null if shoulders aren't both confidently detected.
+export function shoulderWidth(kp) {
+  const d = dist(kp.leftShoulder, kp.rightShoulder);
+  return d;
+}
+
+// Scale-and-center a set of {x,y} points to fit inside a box {x,y,w,h} with
+// padding, preserving aspect ratio. Pure — used by the Copy-Pose preview so the
+// whole figure always fits and can't be clipped. Returns new points + the
+// transform (scale, offset) in case the caller needs it.
+export function fitToBox(points, box, pad = 0.12) {
+  if (!points.length) return { points: [], scale: 1, ox: box.x, oy: box.y };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const srcW = Math.max(1e-6, maxX - minX);
+  const srcH = Math.max(1e-6, maxY - minY);
+  const padX = box.w * pad, padY = box.h * pad;
+  const availW = box.w - 2 * padX;
+  const availH = box.h - 2 * padY;
+  const scale = Math.min(availW / srcW, availH / srcH);
+  // center the scaled figure within the box
+  const drawnW = srcW * scale, drawnH = srcH * scale;
+  const ox = box.x + padX + (availW - drawnW) / 2 - minX * scale;
+  const oy = box.y + padY + (availH - drawnH) / 2 - minY * scale;
+  const out = points.map((p) => ({ x: p.x * scale + ox, y: p.y * scale + oy, tag: p.tag }));
+  return { points: out, scale, ox, oy };
+}

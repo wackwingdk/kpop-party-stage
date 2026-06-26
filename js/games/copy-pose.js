@@ -6,7 +6,8 @@
 // body size and screen position, and forgiving so everyone scores well.
 
 import {
-  poseAngles, poseScore, headPoint, makeSparkles, spawnSparkles, updateSparkles, drawSparkles,
+  poseAngles, poseScore, headPoint, fitToBox,
+  makeSparkles, spawnSparkles, updateSparkles, drawSparkles,
 } from "./lib.js";
 
 // Target poses as joint angles (degrees). Angles roughly: 180 = straight limb,
@@ -94,70 +95,129 @@ export default {
   _next() { this.index = (this.index + 1) % POSES.length; this._enterShow(); },
 };
 
+// --- pose figure builder (pure) --------------------------------------------
+
+// Build a stick figure from target joint angles in an abstract coordinate
+// space (y grows downward). Returns { head, bones: [[p1,p2], ...] }. The figure
+// is later scaled into the preview box by fitToBox, so absolute sizes here are
+// arbitrary — only proportions/angles matter.
+//
+// Angle convention (matches lib.poseAngles): for a shoulder, the angle is at
+// the shoulder vertex between the elbow and the hip; ~20° = arm down by side,
+// ~90° = arm straight out (T), ~160° = arm up. We map that to an elevation.
+export function buildPoseFigure(angles) {
+  const SHOULDER_Y = 0;
+  const HALF = 30;     // half shoulder width
+  const TORSO = 70;
+  const UPPER = 34;    // upper-arm / thigh length
+  const FORE = 30;     // forearm / shin length
+
+  const neck = { x: 0, y: SHOULDER_Y };
+  const head = { x: 0, y: SHOULDER_Y - 34 };
+  const ls = { x: -HALF, y: SHOULDER_Y };
+  const rs = { x: HALF, y: SHOULDER_Y };
+  const lh = { x: -HALF * 0.7, y: SHOULDER_Y + TORSO };
+  const rh = { x: HALF * 0.7, y: SHOULDER_Y + TORSO };
+
+  // Arm: elevation from shoulder angle. side = -1 left, +1 right.
+  // elevation 0 → straight down; 90 → horizontal; 160 → up.
+  function arm(shoulder, sAngle, eAngle, side) {
+    const elev = (sAngle ?? 20); // degrees up from straight-down
+    const rad = (elev * Math.PI) / 180;
+    // upper arm direction: down-and-out at elev 0, out at 90, up at 160
+    const ux = side * Math.sin(rad);
+    const uy = Math.cos(rad); // +y is down
+    const elbow = { x: shoulder.x + ux * UPPER, y: shoulder.y + uy * UPPER };
+    // forearm bends by elbow angle: 180 = straight continuation, smaller = bend up
+    const bend = (180 - (eAngle ?? 175)) * (Math.PI / 180);
+    // rotate the upper-arm direction by the bend (toward the body/up)
+    const baseAng = Math.atan2(uy, ux);
+    const foreAng = baseAng - side * bend;
+    const wrist = {
+      x: elbow.x + Math.cos(foreAng) * FORE,
+      y: elbow.y + Math.sin(foreAng) * FORE,
+    };
+    return { elbow, wrist };
+  }
+
+  // Leg: knee angle ~175 straight, smaller = bent; spread by hip.
+  function leg(hip, kAngle, side) {
+    const straight = (kAngle ?? 175) > 150;
+    const spread = straight ? 0.5 : 0.25;
+    const knee = { x: hip.x + side * UPPER * spread, y: hip.y + UPPER };
+    const ankle = {
+      x: knee.x + side * FORE * (straight ? spread : 0.5),
+      y: knee.y + FORE,
+    };
+    return { knee, ankle };
+  }
+
+  const la = arm(ls, angles.leftShoulder, angles.leftElbow, -1);
+  const ra = arm(rs, angles.rightShoulder, angles.rightElbow, +1);
+  const ll = leg(lh, angles.leftKnee, -1);
+  const rl = leg(rh, angles.rightKnee, +1);
+
+  const bones = [
+    [neck, head],
+    [ls, rs],            // shoulders
+    [neck, { x: 0, y: SHOULDER_Y + TORSO }], // torso
+    [ls, lh], [rs, rh],  // sides
+    [lh, rh],            // hips
+    [ls, la.elbow], [la.elbow, la.wrist],   // left arm
+    [rs, ra.elbow], [ra.elbow, ra.wrist],   // right arm
+    [lh, ll.knee], [ll.knee, ll.ankle],     // left leg
+    [rh, rl.knee], [rl.knee, rl.ankle],     // right leg
+  ];
+
+  return { head, bones };
+}
+
 // --- drawing helpers --------------------------------------------------------
 
-// Draw a small stick figure from the target angles so kids see the shape.
+// Draw a stick figure from the target angles, scaled to ALWAYS fit its box.
+// Fix for the "you can only see half the pose" bug: we first build the whole
+// figure in an abstract space, then fitToBox scales+centers it so wide poses
+// (T-Pose, Star Jump) can't be clipped.
 function drawTargetPreview(ctx, pose, W, H) {
-  const boxW = W * 0.16, boxH = boxW * 1.2;
-  const x = W - boxW - 24, y = 24;
+  const boxW = W * 0.16, boxH = boxW * 1.25;
+  const box = { x: W - boxW - 24, y: 24, w: boxW, h: boxH };
+
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.strokeStyle = "#3ee0ff";
   ctx.lineWidth = 3;
-  roundRect(ctx, x, y, boxW, boxH, 16);
+  roundRect(ctx, box.x, box.y, box.w, box.h, 16);
   ctx.fill(); ctx.stroke();
 
-  // Build an approximate stick figure from the angles. We anchor shoulders/hips
-  // and rotate limbs by the target angles. This is illustrative, not exact.
-  const cx = x + boxW / 2, sy = y + boxH * 0.34;
-  const limb = boxW * 0.22;
-  const a = pose.angles;
+  // Build the figure (abstract coords), collect all points, fit them into the box.
+  const fig = buildPoseFigure(pose.angles);
+  const allPts = [];
+  for (const [a, b] of fig.bones) { allPts.push(a, b); }
+  allPts.push(fig.head);
+  const fitted = fitToBox(allPts, box, 0.16);
+
+  // fitToBox returns points in the same order we pushed them: bones first
+  // (2 per bone), then head last.
   ctx.strokeStyle = "#ffd23e";
-  ctx.lineWidth = 5;
+  ctx.lineWidth = Math.max(3, box.w * 0.035);
   ctx.lineCap = "round";
-
-  // head
+  ctx.shadowColor = "#ffd23e";
+  ctx.shadowBlur = 10;
+  for (let i = 0; i < fig.bones.length; i++) {
+    const a = fitted.points[i * 2];
+    const b = fitted.points[i * 2 + 1];
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  // head circle (last fitted point)
+  const head = fitted.points[fitted.points.length - 1];
   ctx.beginPath();
-  ctx.arc(cx, sy - limb * 0.7, limb * 0.35, 0, Math.PI * 2);
+  ctx.arc(head.x, head.y, box.w * 0.09, 0, Math.PI * 2);
   ctx.stroke();
-  // torso
-  const hy = sy + limb * 1.4;
-  ctx.beginPath(); ctx.moveTo(cx, sy); ctx.lineTo(cx, hy); ctx.stroke();
-  // shoulders horizontal
-  const lsX = cx - limb, rsX = cx + limb;
-  ctx.beginPath(); ctx.moveTo(lsX, sy); ctx.lineTo(rsX, sy); ctx.stroke();
-
-  // arms: use shoulder angle to decide elevation (rough mapping)
-  drawLimbPair(ctx, lsX, sy, a.leftShoulder, a.leftElbow, limb, -1);
-  drawLimbPair(ctx, rsX, sy, a.rightShoulder, a.rightElbow, limb, +1);
-
-  // legs from hip
-  drawLeg(ctx, cx, hy, a.leftKnee, limb, -1);
-  drawLeg(ctx, cx, hy, a.rightKnee, limb, +1);
 
   ctx.restore();
-}
-
-function drawLimbPair(ctx, x, y, shoulderAngle, elbowAngle, limb, side) {
-  // Map shoulder angle (0=down by side, 90=horizontal, 160=up) to a screen angle.
-  const sa = (shoulderAngle ?? 20);
-  // elbow point
-  const rad = ((90 - sa) * Math.PI) / 180; // crude: more angle → more raised
-  const ex = x + side * Math.cos(rad) * limb;
-  const ey = y - Math.sin((sa / 180) * Math.PI) * limb;
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
-  // forearm continues outward
-  const fx = ex + side * limb * 0.7;
-  const fy = ey - ((elbowAngle ?? 175) > 120 ? limb * 0.2 : -limb * 0.4);
-  ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(fx, fy); ctx.stroke();
-}
-
-function drawLeg(ctx, x, y, kneeAngle, limb, side) {
-  const spread = (kneeAngle ?? 175) > 150 ? 0.7 : 0.3;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + side * limb * spread, y + limb * 1.2);
-  ctx.stroke();
 }
 
 function drawDancerScore(ctx, d, score, big = false) {

@@ -67,7 +67,7 @@ function dancer(id, overrides = {}) {
 }
 
 // --- Drive each game ---
-const games = ["freeze-dance", "photo-booth", "copy-pose", "pop-hearts"];
+const games = ["freeze-dance", "princess", "copy-pose", "pop-hearts"];
 for (const id of games) {
   console.log(`→ entering game: ${id}`);
   await inject([dancer(0), dancer(1)]);
