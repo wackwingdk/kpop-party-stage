@@ -60,6 +60,30 @@ export function hasFallenOut(man, floorBottomY) {
   return man.y > floorBottomY;
 }
 
+// Build the floor layout (pure). Returns { floor:[{x1,x2,y}], gapWidth,
+// handHalfWidth }. BALANCE RULE enforced here: a gap is sized as a fraction of
+// the hand bridge width so a single hand always spans a hole with margin.
+export function buildFloor(W, groundY, numGaps = 3) {
+  const handHalfWidth = Math.round(W * 0.085);   // full hand ≈ 17% of width
+  const handWidth = handHalfWidth * 2;
+  const gap = Math.round(handWidth * 0.6);       // hole ≈ 0.6× a hand → coverable
+  const startSolid = Math.round(W * 0.2);
+  const endSolid = Math.round(W * 0.16);
+  const middle = W - startSolid - endSolid;
+  const chunk = Math.round((middle - numGaps * gap) / (numGaps + 1));
+
+  const floor = [];
+  floor.push({ x1: 0, x2: startSolid, y: groundY });
+  let x = startSolid;
+  for (let i = 0; i < numGaps; i++) {
+    x += gap;
+    floor.push({ x1: x, x2: x + chunk, y: groundY });
+    x += chunk;
+  }
+  floor.push({ x1: W - endSolid, x2: W + 40, y: groundY });
+  return { floor, gapWidth: gap, handHalfWidth, handWidth };
+}
+
 // Build platform objects from the floor segments + the dancers' hands.
 // floorSegments: [{x1,x2,y}], dancers: engine dancer objects.
 // handHalfWidth: half the width of a hand platform (px); kpMinScore gates hands.

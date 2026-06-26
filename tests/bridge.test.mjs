@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  findSupport, stepMan, isRescued, hasFallenOut, buildPlatforms,
+  findSupport, stepMan, isRescued, hasFallenOut, buildPlatforms, buildFloor,
   GRAVITY, WALK_SPEED, SNAP_BAND,
 } from "../js/games/bridge-physics.js";
 
@@ -100,6 +100,41 @@ test("buildPlatforms: turns confident wrists into hand platforms", () => {
   assert.equal(hand.x2, 340);
   assert.equal(hand.y, 250);
   assert.equal(hand.color, "#ff3ec8");
+});
+
+// BALANCE: every hole must be smaller than a hand bridge, at every canvas size,
+// so a single hand can always span a gap. This is the bug the user hit.
+test("buildFloor: every gap is smaller than a hand bridge (all sizes)", () => {
+  for (const W of [480, 640, 960, 1280, 1920]) {
+    const { floor, gapWidth, handWidth } = buildFloor(W, 400, 3);
+    assert.ok(gapWidth < handWidth,
+      `W=${W}: gap ${gapWidth} should be < hand bridge ${handWidth}`);
+    // verify the actual gaps between consecutive floor chunks match gapWidth
+    for (let i = 0; i < floor.length - 1; i++) {
+      const realGap = floor[i + 1].x1 - floor[i].x2;
+      // last chunk extends past the edge; only check interior gaps
+      if (floor[i + 1].x1 < W) {
+        assert.ok(realGap <= handWidth,
+          `W=${W}: a real gap (${realGap}) exceeds hand bridge (${handWidth})`);
+      }
+    }
+  }
+});
+
+test("buildFloor: a hand centered on a gap bridges it (man crosses, doesn't fall)", () => {
+  const W = 640, groundY = 400;
+  const { floor, handHalfWidth } = buildFloor(W, groundY, 3);
+  // a hand centered on the first interior gap
+  const gapCenter = (floor[0].x2 + floor[1].x1) / 2;
+  const dancers = [{ color: "#ff3ec8", keypoints: {
+    leftWrist: { x: gapCenter, y: groundY, score: 1 },
+    rightWrist: { x: 0, y: 0, score: 0 },
+  } }];
+  const platforms = buildPlatforms(floor, dancers, handHalfWidth);
+  // a man standing right at the gap center should be supported by the hand
+  const man = { x: gapCenter, y: groundY, vy: 0, state: "walking" };
+  const next = stepMan(man, platforms, 0.05);
+  assert.equal(next.state, "walking", "man should be held up by the hand bridge");
 });
 
 test("buildPlatforms: a man can stand on a hand platform", () => {

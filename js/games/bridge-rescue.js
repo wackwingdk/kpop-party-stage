@@ -7,7 +7,7 @@
 // respawns. No losing — just keep rescuing. Cooperative and endless.
 
 import {
-  buildPlatforms, stepMan, isRescued, hasFallenOut,
+  buildPlatforms, buildFloor, stepMan, isRescued, hasFallenOut,
 } from "./bridge-physics.js";
 import {
   makeSparkles, spawnSparkles, updateSparkles, drawSparkles,
@@ -83,16 +83,11 @@ export default {
     this._w = W; this._h = H;
     this.groundY = Math.round(H * 0.82);     // where men walk
     this.goalX = Math.round(W * 0.93);
-    this.handHalfWidth = Math.round(W * 0.06);
-    // Floor split into chunks with gaps between them. Start & end are solid so
-    // men have somewhere to spawn and a ledge at the castle.
-    const y = this.groundY;
-    this.floor = [
-      { x1: 0,            x2: W * 0.22, y },
-      { x1: W * 0.36,     x2: W * 0.52, y },   // gap before & after
-      { x1: W * 0.66,     x2: W * 0.80, y },
-      { x1: W * 0.90,     x2: W + 40,   y },   // landing by the castle
-    ];
+    // Pure layout enforces the balance rule (hole < hand bridge).
+    const layout = buildFloor(W, this.groundY, 3);
+    this.floor = layout.floor;
+    this.gapWidth = layout.gapWidth;
+    this.handHalfWidth = layout.handHalfWidth;
   },
 
   _spawnMan() {
