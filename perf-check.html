@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Performance Check — K-Pop Stage</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #0b0b16; color: #fff;
+      font-family: system-ui, "Segoe UI", sans-serif; overflow: hidden; }
+    #stage { position: relative; width: 100vw; height: 100vh; display: grid; place-items: center; }
+    canvas { max-width: 100%; max-height: 100%; border-radius: 16px;
+      box-shadow: 0 0 60px rgba(255, 0, 200, 0.4); background: #000; }
+    #overlay { position: absolute; top: 16px; left: 16px; right: 16px; display: flex;
+      flex-wrap: wrap; gap: 12px; align-items: center; pointer-events: none; }
+    .badge { background: rgba(0,0,0,0.6); padding: 10px 16px; border-radius: 999px;
+      font-size: 18px; font-weight: 600; border: 1px solid rgba(255,255,255,0.15); }
+    .badge b { color: #4dffd2; }
+    #start { pointer-events: auto; cursor: pointer; font-size: 22px; font-weight: 800;
+      padding: 18px 34px; border: none; border-radius: 999px; color: #1a0022;
+      background: linear-gradient(135deg, #ff5bd1, #ffd166); }
+    #verdict { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
+      font-size: 24px; font-weight: 800; padding: 12px 24px; border-radius: 12px;
+      background: rgba(0,0,0,0.6); }
+    #status { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.6); padding: 12px 22px; border-radius: 12px; font-size: 16px;
+      max-width: 90vw; text-align: center; }
+    .ok { color: #4dffd2; } .warn { color: #ffd23e; } .err { color: #ff7a7a; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="canvas" width="960" height="720"></canvas>
+    <div id="overlay">
+      <button id="start">▶ Start performance check</button>
+      <span class="badge">FPS: <b id="fps">–</b></span>
+      <span class="badge">People: <b id="count">0</b></span>
+      <span class="badge">GPU: <b id="backend">–</b></span>
+    </div>
+    <div id="verdict"></div>
+    <div id="status">Click start, allow the camera, then move around. Watch the FPS.</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const canvas = $("canvas"), ctx = canvas.getContext("2d");
+    const video = document.createElement("video");
+    video.playsInline = true; video.muted = true;
+    let detector = null, running = false, frames = 0, lastTime = performance.now();
+    let fpsSamples = [];
+
+    function setStatus(msg, cls = "") { $("status").className = cls; $("status").textContent = msg; }
+
+    async function start() {
+      $("start").style.display = "none";
+      try {
+        setStatus("Requesting camera — click Allow…");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 960, height: 720, facingMode: "user" }, audio: false });
+        video.srcObject = stream; await video.play();
+      } catch (e) {
+        setStatus("❌ Camera blocked: " + e.message + " — check Windows ▸ Settings ▸ Privacy ▸ Camera.", "err");
+        return;
+      }
+      try {
+        const ok = await tf.setBackend("webgl");
+        if (!ok) await tf.setBackend("cpu");
+        await tf.ready();
+        $("backend").textContent = tf.getBackend();
+        detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,
+          { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING, enableTracking: true,
+            trackerType: poseDetection.TrackerType.BoundingBox });
+        setStatus("Running — move around! Dots should follow you.", "ok");
+      } catch (e) {
+        setStatus("❌ Model failed: " + e.message, "err");
+        return;
+      }
+      running = true; requestAnimationFrame(loop);
+    }
+
+    async function loop() {
+      if (!running) return;
+      ctx.save(); ctx.scale(-1, 1);
+      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height); ctx.restore();
+      let poses = [];
+      try { poses = await detector.estimatePoses(video, { flipHorizontal: false }); } catch (_) {}
+      $("count").textContent = poses.length;
+      for (const p of poses) for (const kp of p.keypoints) {
+        if (kp.score < 0.3) continue;
+        ctx.beginPath(); ctx.arc(canvas.width - kp.x, kp.y, 7, 0, Math.PI * 2);
+        ctx.fillStyle = "#4dffd2"; ctx.fill();
+      }
+      frames++;
+      const now = performance.now();
+      if (now - lastTime >= 1000) {
+        const fps = frames; $("fps").textContent = fps; frames = 0; lastTime = now;
+        fpsSamples.push(fps); if (fpsSamples.length > 5) fpsSamples.shift();
+        updateVerdict();
+      }
+      requestAnimationFrame(loop);
+    }
+
+    function updateVerdict() {
+      const avg = fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length;
+      const v = $("verdict");
+      if (avg >= 25) { v.textContent = "✅ Great! This PC runs the games smoothly."; v.className = "ok"; }
+      else if (avg >= 15) { v.textContent = "🟡 OK — playable. App will use performance mode."; v.className = "warn"; }
+      else { v.textContent = "🔴 Low FPS — try closing other apps / lower resolution."; v.className = "err"; }
+    }
+    $("start").addEventListener("click", start);
+  </script>
+</body>
+</html>

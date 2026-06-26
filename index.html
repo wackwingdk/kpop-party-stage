@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>✨ Melina's K-Pop Stage ✨</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/stage.css" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="canvas" width="960" height="720"></canvas>
+    <!-- DOM overlays (menu, countdown, errors) are injected here by ui.js -->
+  </div>
+
+  <!-- TensorFlow.js (unified bundle: core + ops + WebGL + CPU) + MoveNet, from CDN.
+       The unified bundle is required — piecemeal packages omit chainable math ops. -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

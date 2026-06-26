@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TFJS backend diagnostics</title>
+</head>
+<body>
+<pre id="out">running…</pre>
+<!-- HYPOTHESIS TEST: single unified bundle (core + ops + webgl + cpu) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script>
+  const out = document.getElementById("out");
+  const log = (m) => { out.textContent += "\n" + m; };
+  const lines = [];
+  window.__diag = { done: false };
+
+  async function tryBackend(name) {
+    try {
+      const ok = await tf.setBackend(name);
+      await tf.ready();
+      // do a tiny op to confirm it really works
+      const t = tf.tensor1d([1, 2, 3]).square();
+      const data = await t.data();
+      t.dispose();
+      return { name, set: ok, backend: tf.getBackend(), op: Array.from(data).join(",") };
+    } catch (e) {
+      return { name, set: false, error: String(e && e.message || e) };
+    }
+  }
+
+  (async () => {
+    out.textContent = "";
+    log("typeof tf: " + (typeof tf));
+    log("tfjs version: " + (tf?.version_core || tf?.version?.tfjs || "unknown"));
+    log("registered backends BEFORE init: " + JSON.stringify(tf.engine().registryFactory ? Object.keys(tf.engine().registryFactory) : "n/a"));
+
+    // raw WebGL availability (independent of TFJS)
+    try {
+      const c = document.createElement("canvas");
+      const gl = c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl");
+      log("raw WebGL context: " + (gl ? gl.getParameter(gl.VERSION) : "NULL (no WebGL)"));
+    } catch (e) {
+      log("raw WebGL error: " + e.message);
+    }
+
+    const webgl = await tryBackend("webgl");
+    log("webgl backend: " + JSON.stringify(webgl));
+    const cpu = await tryBackend("cpu");
+    log("cpu backend: " + JSON.stringify(cpu));
+
+    window.__diag = {
+      done: true,
+      webglWorks: !!webgl.op,
+      cpuWorks: !!cpu.op,
+      webgl,
+      cpu,
+    };
+    log("\nDIAG DONE");
+  })();
+</script>
+</body>
+</html>

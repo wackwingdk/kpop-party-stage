@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Webcam + Body Tracking — Prototype Test</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0b0b16;
+      color: #fff;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    #stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* The canvas shows the mirrored video + skeleton dots */
+    canvas {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 16px;
+      box-shadow: 0 0 60px rgba(255, 0, 200, 0.4);
+      background: #000;
+    }
+    #overlay {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .badge {
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .badge b { color: #4dffd2; }
+    #start {
+      pointer-events: auto;
+      cursor: pointer;
+      font-size: 22px;
+      font-weight: 800;
+      padding: 18px 34px;
+      border: none;
+      border-radius: 999px;
+      color: #1a0022;
+      background: linear-gradient(135deg, #ff5bd1, #ffd166);
+      box-shadow: 0 8px 30px rgba(255, 91, 209, 0.5);
+    }
+    #status {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      padding: 12px 22px;
+      border-radius: 12px;
+      font-size: 16px;
+      max-width: 90vw;
+      text-align: center;
+    }
+    .ok { color: #4dffd2; }
+    .err { color: #ff7a7a; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="canvas" width="960" height="720"></canvas>
+    <div id="overlay">
+      <button id="start">▶ Start camera test</button>
+      <span class="badge">FPS: <b id="fps">–</b></span>
+      <span class="badge">Dancers detected: <b id="count">0</b></span>
+    </div>
+    <div id="status">Click “Start camera test”, then allow camera access when the browser asks.</div>
+  </div>
+
+  <!-- TensorFlow.js (unified bundle: core + ops + WebGL + CPU) + MoveNet, from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+  <script>
+    const startBtn = document.getElementById("start");
+    const statusEl = document.getElementById("status");
+    const fpsEl = document.getElementById("fps");
+    const countEl = document.getElementById("count");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const video = document.createElement("video");
+    video.playsInline = true;
+    video.muted = true;
+
+    let detector = null;
+    let running = false;
+    let lastTime = performance.now();
+    let frames = 0;
+
+    function setStatus(msg, cls = "") {
+      statusEl.className = "";
+      if (cls) statusEl.classList.add(cls);
+      statusEl.textContent = msg;
+    }
+
+    async function start() {
+      startBtn.disabled = true;
+      startBtn.style.display = "none";
+
+      // 1) Webcam
+      try {
+        setStatus("Requesting camera… click “Allow” in the browser popup.");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 960, height: 720, facingMode: "user" },
+          audio: false,
+        });
+        video.srcObject = stream;
+        await video.play();
+        setStatus("Camera works ✓ — loading body-tracking model…", "ok");
+      } catch (e) {
+        setStatus("❌ Could not access camera: " + e.message +
+          " — on macOS check System Settings ▸ Privacy & Security ▸ Camera, and allow this browser.", "err");
+        return;
+      }
+
+      // 2) Model
+      try {
+        // Prefer GPU (WebGL) for speed; fall back to CPU so it never hard-fails.
+        let backend = "webgl";
+        const okWebgl = await tf.setBackend("webgl");
+        if (!okWebgl) {
+          await tf.setBackend("cpu");
+          backend = "cpu";
+        }
+        await tf.ready();
+        window.__backend = tf.getBackend();
+        detector = await poseDetection.createDetector(
+          poseDetection.SupportedModels.MoveNet,
+          {
+            modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+            enableTracking: true,
+            trackerType: poseDetection.TrackerType.BoundingBox,
+          }
+        );
+        setStatus("All set ✓ — move around! Dots should appear on your body.", "ok");
+      } catch (e) {
+        setStatus("❌ Could not load the body-tracking model: " + e.message, "err");
+        return;
+      }
+
+      running = true;
+      requestAnimationFrame(loop);
+    }
+
+    async function loop() {
+      if (!running) return;
+
+      // Mirror the video horizontally so it feels like a mirror
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      let dancers = [];
+      try {
+        dancers = await detector.estimatePoses(video, { flipHorizontal: false });
+      } catch (e) {
+        // transient frame errors are fine; keep going
+      }
+
+      countEl.textContent = dancers.length;
+
+      // Draw keypoints (mirrored to match the mirrored video)
+      for (const person of dancers) {
+        for (const kp of person.keypoints) {
+          if (kp.score != null && kp.score < 0.3) continue;
+          const x = canvas.width - kp.x; // mirror X
+          const y = kp.y;
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.fillStyle = "#4dffd2";
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(255,91,209,0.9)";
+          ctx.stroke();
+        }
+      }
+
+      // FPS counter
+      frames++;
+      const now = performance.now();
+      if (now - lastTime >= 1000) {
+        fpsEl.textContent = frames;
+        window.__lastFps = frames; // exposed for automated testing
+        frames = 0;
+        lastTime = now;
+      }
+      window.__lastDancerCount = dancers.length; // exposed for automated testing
+
+      requestAnimationFrame(loop);
+    }
+
+    startBtn.addEventListener("click", start);
+  </script>
+</body>
+</html>

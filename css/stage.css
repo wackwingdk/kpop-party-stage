@@ -1,0 +1,245 @@
+/* stage.css — K-pop "idol stage" neon theme, sized big for TV readability. */
+
+:root {
+  color-scheme: dark;
+  --pink: #ff3ec8;
+  --cyan: #3ee0ff;
+  --purple: #b06bff;
+  --gold: #ffd23e;
+  --bg: #0b0b16;
+  --glass: rgba(20, 12, 35, 0.62);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: #fff;
+  font-family: "Baloo 2", "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* The stage holds the canvas + DOM overlays stacked on top of each other. */
+#stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(176,107,255,0.25), transparent 40%),
+    radial-gradient(circle at 85% 90%, rgba(62,224,255,0.22), transparent 45%),
+    var(--bg);
+}
+
+#canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Generic full-screen overlay (menus, errors, countdown). */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+  padding: 4vmin;
+  z-index: 10;
+}
+
+/* --- Title / menu --- */
+.menu-overlay {
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255,62,200,0.18), transparent 60%),
+    rgba(11, 11, 22, 0.82);
+  backdrop-filter: blur(4px);
+}
+
+.title {
+  font-size: clamp(36px, 7vw, 96px);
+  font-weight: 800;
+  margin: 0;
+  background: linear-gradient(100deg, var(--pink), var(--gold), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 40px rgba(255, 62, 200, 0.35);
+  letter-spacing: 1px;
+}
+
+.subtitle {
+  font-size: clamp(18px, 2.4vw, 32px);
+  margin: 0;
+  opacity: 0.92;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: clamp(16px, 2.5vw, 32px);
+  width: min(1100px, 88vw);
+  margin-top: 12px;
+}
+
+.tile {
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.18);
+  border-radius: 28px;
+  padding: clamp(18px, 3vw, 40px);
+  background: var(--glass);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+}
+.tile:hover, .tile:focus-visible {
+  transform: translateY(-6px) scale(1.03);
+  border-color: var(--pink);
+  box-shadow: 0 0 50px rgba(255, 62, 200, 0.5);
+  outline: none;
+}
+.tile-emoji { font-size: clamp(46px, 7vw, 92px); line-height: 1; }
+.tile-title { font-size: clamp(20px, 2.6vw, 38px); font-weight: 700; }
+
+.settings-btn {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: var(--glass);
+  color: #fff;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+/* --- Back button (in-game) --- */
+.back-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 20;
+  padding: 14px 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.back-btn:hover { border-color: var(--cyan); }
+
+/* --- Countdown --- */
+.countdown {
+  font-size: clamp(120px, 28vw, 400px);
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 60px var(--pink), 0 0 120px var(--purple);
+  pointer-events: none;
+  background: rgba(11,11,22,0.25);
+}
+.countdown.pulse { animation: pop 0.8s ease-out; }
+@keyframes pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  35% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.85; }
+}
+
+/* --- Error screen --- */
+.error-overlay { background: rgba(11, 11, 22, 0.92); }
+.error-emoji { font-size: clamp(60px, 12vw, 140px); }
+.error-title { font-size: clamp(26px, 4vw, 52px); margin: 0; }
+.error-message {
+  font-size: clamp(16px, 2.2vw, 28px);
+  max-width: 760px;
+  line-height: 1.45;
+  opacity: 0.95;
+}
+.retry-btn, .keep-btn, .retake-btn {
+  cursor: pointer;
+  font-size: clamp(20px, 2.6vw, 32px);
+  font-weight: 800;
+  padding: 16px 40px;
+  border: none;
+  border-radius: 999px;
+  color: #1a0022;
+  background: linear-gradient(135deg, var(--pink), var(--gold));
+  box-shadow: 0 8px 30px rgba(255, 62, 200, 0.5);
+}
+
+/* --- Banner --- */
+.banner {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 14px 30px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: clamp(18px, 2.2vw, 30px);
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- Photo booth gallery + buttons --- */
+.photo-actions {
+  position: absolute;
+  bottom: 5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 20px;
+  z-index: 25;
+}
+.retake-btn { background: linear-gradient(135deg, var(--cyan), var(--purple)); color: #06121a; }
+
+.gallery {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 25;
+}
+.gallery img {
+  width: 90px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--pink);
+}
+
+/* --- Start / fullscreen prompt --- */
+.start-overlay { background: rgba(11,11,22,0.95); }
+.start-btn {
+  cursor: pointer;
+  font-size: clamp(22px, 3vw, 40px);
+  font-weight: 900;
+  padding: 22px 50px;
+  border: none;
+  border-radius: 999px;
+  color: #1a0022;
+  background: linear-gradient(135deg, var(--pink), var(--gold), var(--cyan));
+  box-shadow: 0 10px 40px rgba(255, 62, 200, 0.55);
+}
+.hint { font-size: clamp(14px, 1.8vw, 22px); opacity: 0.8; max-width: 640px; }

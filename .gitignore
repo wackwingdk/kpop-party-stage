@@ -1,0 +1,14 @@
+# Dependencies (installed locally for tests; not needed for the deployed site)
+node_modules/
+prototype/node_modules/
+
+# Test/dev artifacts
+tests/*.png
+prototype/*.png
+
+# OS noise
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
