@@ -210,16 +210,44 @@ export default {
   },
 
   _drawHud(ctx, W) {
+    // Scoreboard pill, placed well below the top edge so it's never clipped
+    // (and to the right of the ⬅ Menu button). Backing plate so it reads on the
+    // busy webcam feed behind it.
+    const text = `🏰 Rescued: ${this.rescued}`;
+    const fontSize = Math.round(W * 0.05);
+    const padX = fontSize * 0.7, padY = fontSize * 0.45;
+    const top = 70; // fixed offset from the top — safe from clipping/overscan
+
     ctx.save();
+    ctx.font = `900 ${fontSize}px "Baloo 2", system-ui, sans-serif`;
     ctx.textAlign = "center";
-    ctx.font = `900 ${Math.round(W * 0.045)}px "Baloo 2", system-ui, sans-serif`;
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width;
+    const boxW = tw + padX * 2, boxH = fontSize + padY * 2;
+    const cx = W / 2, cy = top + boxH / 2;
+
+    // backing plate
+    ctx.fillStyle = "rgba(20, 12, 35, 0.72)";
+    ctx.strokeStyle = "#ffd23e";
+    ctx.lineWidth = 3;
+    if (ctx.roundRect) {
+      ctx.beginPath(); ctx.roundRect(cx - boxW / 2, top, boxW, boxH, boxH / 2);
+      ctx.fill(); ctx.stroke();
+    } else {
+      ctx.fillRect(cx - boxW / 2, top, boxW, boxH);
+    }
+
+    // the count
     ctx.fillStyle = "#fff";
-    ctx.shadowColor = "#b06bff";
+    ctx.shadowColor = "#ffd23e";
     ctx.shadowBlur = 16;
-    ctx.fillText(`✨ Rescued: ${this.rescued} ✨`, W / 2, ctx.canvas.height * 0.1);
-    ctx.font = `700 ${Math.round(W * 0.025)}px "Baloo 2", system-ui, sans-serif`;
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.fillText("Use your hands as bridges! 🙌", W / 2, ctx.canvas.height * 0.16);
+    ctx.fillText(text, cx, cy);
+
+    // helper line just under the scoreboard
+    ctx.shadowBlur = 8;
+    ctx.font = `700 ${Math.round(W * 0.026)}px "Baloo 2", system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillText("Use your hands as bridges! 🙌", cx, top + boxH + Math.round(W * 0.022));
     ctx.restore();
   },
 };
