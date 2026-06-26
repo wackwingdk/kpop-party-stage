@@ -148,6 +148,22 @@ export function shoulderWidth(kp) {
   return d;
 }
 
+// Transform describing a bone from point a → b: its start, length, and the
+// angle (radians) of a→b. Used to lay a sleeve image along the upper arm.
+// Returns null if either point is missing/low-confidence.
+export function boneTransform(a, b) {
+  if (!a || !b || a.score < KP_MIN || b.score < KP_MIN) return null;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { x: a.x, y: a.y, length: Math.hypot(dx, dy), angle: Math.atan2(dy, dx) };
+}
+
+// Angle (radians) of the shoulder line, so the gown can lean with the body.
+export function shoulderTilt(kp) {
+  const ls = kp.leftShoulder, rs = kp.rightShoulder;
+  if (!ls || !rs || ls.score < KP_MIN || rs.score < KP_MIN) return 0;
+  return Math.atan2(rs.y - ls.y, rs.x - ls.x);
+}
+
 // Scale-and-center a set of {x,y} points to fit inside a box {x,y,w,h} with
 // padding, preserving aspect ratio. Pure — used by the Copy-Pose preview so the
 // whole figure always fits and can't be clipped. Returns new points + the

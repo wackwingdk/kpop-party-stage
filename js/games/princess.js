@@ -7,9 +7,11 @@
 //   it fits each girl whether she's close or far, and works for 3-4 at once.
 
 import {
-  headPoint, shoulderWidth, KP_MIN,
+  headPoint, shoulderWidth, shoulderTilt, boneTransform, KP_MIN,
   makeSparkles, spawnSparkles, updateSparkles, drawSparkles,
 } from "./lib.js";
+import { buildDressAssets } from "./dress-assets.js";
+import { DANCER_COLORS } from "../engine.js";
 
 export default {
   id: "princess",
@@ -19,6 +21,9 @@ export default {
   start() {
     this.sparkles = makeSparkles();
     this.t = 0;
+    // Decode the SVG outfit (per dancer color) once; drawing waits until ready.
+    this.assets = null;
+    buildDressAssets(DANCER_COLORS).then((a) => { this.assets = a; });
   },
 
   update(ctx, dancers, dt) {
@@ -33,7 +38,13 @@ export default {
       if (!sw) continue; // need shoulders to anchor/scale decorations
       const scale = sw / 120; // 120px shoulders ≈ baseline size
 
-      drawGown(ctx, kp, d.color, scale);
+      const outfit = this.assets ? this.assets[d.color] : null;
+      if (outfit && outfit.gown) {
+        // sleeves first (so the gown body overlaps the shoulder seam nicely)
+        drawSleeve(ctx, outfit.sleeve, kp.leftShoulder, kp.leftElbow, sw);
+        drawSleeve(ctx, outfit.sleeve, kp.rightShoulder, kp.rightElbow, sw);
+        drawDress(ctx, outfit.gown, kp, sw);
+      }
       drawCrown(ctx, kp, scale, this.t);
       drawWand(ctx, kp, scale);
 
@@ -49,62 +60,54 @@ export default {
     drawSparkles(ctx, this.sparkles);
   },
 
-  stop() { this.sparkles = []; },
+  stop() { this.sparkles = []; this.assets = null; },
 };
 
-// --- decoration drawing -----------------------------------------------------
+// --- dress (SVG image) drawing ---------------------------------------------
 
-// A glowing translucent bell-shaped gown from shoulders down past the hips.
-function drawGown(ctx, kp, color, scale) {
+// Draw the gown image anchored at the shoulder midpoint, scaled by shoulder
+// width, leaning with the shoulder tilt. The SVG's anchor is its top-center
+// (100,30) in a 200×320 box, so we size by width and offset accordingly.
+function drawDress(ctx, gownImg, kp, sw) {
   const ls = kp.leftShoulder, rs = kp.rightShoulder;
-  const lh = kp.leftHip, rh = kp.rightHip;
   if (!ls || !rs || ls.score < KP_MIN || rs.score < KP_MIN) return;
-
-  const shoulderY = (ls.y + rs.y) / 2;
   const midX = (ls.x + rs.x) / 2;
-  // hips give us the length; if missing, estimate from shoulder width
-  let hipY;
-  if (lh && rh && lh.score >= KP_MIN && rh.score >= KP_MIN) {
-    hipY = (lh.y + rh.y) / 2;
-  } else {
-    hipY = shoulderY + 220 * scale;
-  }
-  const skirtBottom = hipY + 180 * scale;
-  const topHalf = Math.abs(rs.x - ls.x) / 2 + 10 * scale;
-  const bottomHalf = topHalf + 150 * scale; // flare out
+  const midY = (ls.y + rs.y) / 2;
+
+  // Make the gown a bit wider than the shoulders so it reads as a dress.
+  const targetW = sw * 2.4;
+  const aspect = gownImg.height / gownImg.width; // 320/200 = 1.6
+  const targetH = targetW * aspect;
 
   ctx.save();
-  const grad = ctx.createLinearGradient(0, shoulderY, 0, skirtBottom);
-  grad.addColorStop(0, hexWithAlpha(color, 0.85));
-  grad.addColorStop(1, hexWithAlpha(color, 0.25));
-  ctx.fillStyle = grad;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 24;
-  ctx.beginPath();
-  ctx.moveTo(midX - topHalf, shoulderY);
-  ctx.lineTo(midX + topHalf, shoulderY);
-  // flare down to a wide hem with a gentle curve
-  ctx.quadraticCurveTo(midX + bottomHalf, (shoulderY + skirtBottom) / 2,
-    midX + bottomHalf, skirtBottom);
-  // scalloped hem
-  const scallops = 6;
-  for (let i = 0; i <= scallops; i++) {
-    const x = midX + bottomHalf - (2 * bottomHalf) * (i / scallops);
-    const y = skirtBottom + (i % 2 === 0 ? 0 : 18 * scale);
-    ctx.lineTo(x, y);
-  }
-  ctx.quadraticCurveTo(midX - bottomHalf, (shoulderY + skirtBottom) / 2,
-    midX - topHalf, shoulderY);
-  ctx.closePath();
-  ctx.fill();
+  ctx.translate(midX, midY);
+  ctx.rotate(shoulderTilt(kp));
+  ctx.shadowColor = "rgba(255,255,255,0.35)";
+  ctx.shadowBlur = 12;
+  // anchor top-center: SVG anchor is at x=100/200 (center), y=30/320 from top.
+  const anchorYFrac = 30 / 320;
+  ctx.drawImage(gownImg, -targetW / 2, -targetH * anchorYFrac, targetW, targetH);
+  ctx.restore();
+}
 
-  // a sparkly waist sash
-  ctx.strokeStyle = "rgba(255,255,255,0.85)";
-  ctx.lineWidth = 6 * scale;
-  ctx.beginPath();
-  ctx.moveTo(midX - topHalf, hipY);
-  ctx.lineTo(midX + topHalf, hipY);
-  ctx.stroke();
+// Draw a puff sleeve along the upper arm (shoulder→elbow), rotated to match.
+// Skipped if the arm isn't confidently detected (no floating sleeves).
+function drawSleeve(ctx, sleeveImg, shoulder, elbow, sw) {
+  if (!sleeveImg) return;
+  const t = boneTransform(shoulder, elbow);
+  if (!t) return;
+
+  // size sleeve to the arm: width ~ shoulder width * 0.7, length ~ arm length.
+  const targetW = sw * 0.8;
+  const aspect = sleeveImg.height / sleeveImg.width; // 90/80
+  const targetH = Math.max(t.length * 1.1, targetW * aspect);
+
+  ctx.save();
+  ctx.translate(t.x, t.y);
+  // sleeve SVG hangs downward (+y); rotate so its +y axis points along the arm.
+  ctx.rotate(t.angle - Math.PI / 2);
+  // anchor top-center (40,12 in an 80×90 box)
+  ctx.drawImage(sleeveImg, -targetW / 2, -targetH * (12 / 90), targetW, targetH);
   ctx.restore();
 }
 
@@ -183,19 +186,7 @@ function drawTitle(ctx, text, W) {
   ctx.restore();
 }
 
-// Convert a #rrggbb hex + alpha (0..1) to an rgba() string.
-function hexWithAlpha(hex, a) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
 const SPARKLE_COLORS = ["#ffd23e", "#ff3ec8", "#3ee0ff", "#ffffff", "#b06bff"];
 function pickSparkleColor(t) {
   return SPARKLE_COLORS[Math.floor(t * 3) % SPARKLE_COLORS.length];
 }
-
-// Exposed for tests.
-export const __test = { hexWithAlpha };
