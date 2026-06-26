@@ -81,7 +81,8 @@ export default {
   // --- layout / spawning ---------------------------------------------------
   _layoutFor(W, H) {
     this._w = W; this._h = H;
-    this.groundY = Math.round(H * 0.82);     // where men walk
+    this.groundY = Math.round(H * 0.5);      // where men walk — middle of screen,
+                                             // around chest/hand height for bridging
     this.goalX = Math.round(W * 0.93);
     // Pure layout enforces the balance rule (hole < hand bridge).
     const layout = buildFloor(W, this.groundY, 3);
@@ -96,17 +97,19 @@ export default {
 
   // --- drawing -------------------------------------------------------------
   _drawFloor(ctx, W, H) {
+    // Draw platforms as ledges of fixed thickness (not filled to the bottom),
+    // so the play area reads as floating platforms at mid-screen height.
+    const thickness = Math.round(H * 0.10);
     ctx.save();
     for (const seg of this.floor) {
       const x = Math.max(0, seg.x1);
       const w = Math.min(W, seg.x2) - x;
-      // grassy platform block
-      const grad = ctx.createLinearGradient(0, seg.y, 0, H);
+      const grad = ctx.createLinearGradient(0, seg.y, 0, seg.y + thickness);
       grad.addColorStop(0, "#6a3fb0");
       grad.addColorStop(1, "#2a1850");
       ctx.fillStyle = grad;
-      ctx.fillRect(x, seg.y, w, H - seg.y);
-      // glowing top edge
+      ctx.fillRect(x, seg.y, w, thickness);
+      // glowing top edge (where the men walk)
       ctx.fillStyle = "#b06bff";
       ctx.fillRect(x, seg.y - 4, w, 6);
     }
