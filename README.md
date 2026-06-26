@@ -16,6 +16,7 @@ Everything runs **locally in the browser** — the kids' video never leaves the 
 | 👑 **Princess Magic** | Step in front of the camera and you turn into a princess — a crown, a sparkly gown, and a magic wand follow you live as you move. |
 | 🕺 **Copy the Pose** | Match the pose on screen; everyone gets a score. |
 | 💖 **Pop the Hearts** | Pop floating hearts with your hands for a team score. |
+| 🌉 **Bridge Rescue** | Little men cross the screen over gaps — use your hands as stepping-stone bridges to help them reach the castle. Each one rescued counts! |
 
 Switch games anytime with the **⬅ Menu** button or the **Esc** key.
 

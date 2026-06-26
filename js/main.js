@@ -17,11 +17,12 @@ import freezeDance from "./games/freeze-dance.js";
 import princess from "./games/princess.js";
 import copyPose from "./games/copy-pose.js";
 import popHearts from "./games/pop-hearts.js";
+import bridgeRescue from "./games/bridge-rescue.js";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const PARTY_NAME = "Melina"; // ← change this to reuse for another party
 
-const GAMES = [freezeDance, princess, copyPose, popHearts];
+const GAMES = [freezeDance, princess, copyPose, popHearts, bridgeRescue];
 const GAME_BY_ID = Object.fromEntries(GAMES.map((g) => [g.id, g]));
 
 const stage = document.getElementById("stage");
