@@ -180,7 +180,9 @@ export function buildPoseFigure(angles) {
 // (T-Pose, Star Jump) can't be clipped.
 function drawTargetPreview(ctx, pose, W, H) {
   const boxW = W * 0.16, boxH = boxW * 1.25;
-  const box = { x: W - boxW - 24, y: 24, w: boxW, h: boxH };
+  // Keep a clear top margin (>= 50px) so the preview sits below the title band.
+  const TOP_MARGIN = 80;
+  const box = { x: W - boxW - 24, y: TOP_MARGIN, w: boxW, h: boxH };
 
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.5)";
