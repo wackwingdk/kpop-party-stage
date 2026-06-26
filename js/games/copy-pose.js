@@ -191,20 +191,30 @@ function drawTargetPreview(ctx, pose, W, H) {
   roundRect(ctx, box.x, box.y, box.w, box.h, 16);
   ctx.fill(); ctx.stroke();
 
+  // Stroke + glow + head-circle all draw OUTSIDE the joint points, so we must
+  // reserve an "ink margin" or the thick raised-arm strokes clip the top edge.
+  const lineWidth = Math.max(3, box.w * 0.035);
+  const shadowBlur = 10;
+  const headRadius = box.w * 0.09;
+  const inkMargin = lineWidth / 2 + shadowBlur + headRadius + 4; // px to reserve
+  // express as a fraction of the smaller box dimension, so fitToBox keeps the
+  // whole DRAWN figure (not just the joints) inside the box.
+  const pad = inkMargin / Math.min(box.w, box.h);
+
   // Build the figure (abstract coords), collect all points, fit them into the box.
   const fig = buildPoseFigure(pose.angles);
   const allPts = [];
   for (const [a, b] of fig.bones) { allPts.push(a, b); }
   allPts.push(fig.head);
-  const fitted = fitToBox(allPts, box, 0.16);
+  const fitted = fitToBox(allPts, box, pad);
 
   // fitToBox returns points in the same order we pushed them: bones first
   // (2 per bone), then head last.
   ctx.strokeStyle = "#ffd23e";
-  ctx.lineWidth = Math.max(3, box.w * 0.035);
+  ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
   ctx.shadowColor = "#ffd23e";
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = shadowBlur;
   for (let i = 0; i < fig.bones.length; i++) {
     const a = fitted.points[i * 2];
     const b = fitted.points[i * 2 + 1];
@@ -216,7 +226,7 @@ function drawTargetPreview(ctx, pose, W, H) {
   // head circle (last fitted point)
   const head = fitted.points[fitted.points.length - 1];
   ctx.beginPath();
-  ctx.arc(head.x, head.y, box.w * 0.09, 0, Math.PI * 2);
+  ctx.arc(head.x, head.y, headRadius, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.restore();

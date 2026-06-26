@@ -32,20 +32,32 @@ test("fitToBox: empty input is handled gracefully", () => {
   assert.deepEqual(points, []);
 });
 
-// The real regression test: EVERY pose's figure must fit inside the box.
-test("every Copy-Pose figure fits entirely within the preview box", () => {
-  const box = { x: 1000, y: 24, w: 200, h: 250 };
+// The real regression test: EVERY pose's DRAWN figure (joints + stroke width +
+// glow + head circle) must fit inside the box. We reserve an "ink margin" the
+// same way the game does, then assert no joint point lands within that margin of
+// the edge — i.e. the thick strokes/glow can't spill out. This is the bug the
+// user saw: joints fit but the raised-arm strokes clipped the top.
+test("every Copy-Pose DRAWN figure (incl. stroke + glow) fits in the box", () => {
+  const box = { x: 1000, y: 80, w: 102, h: 128 }; // ~live dimensions
+  const lineWidth = Math.max(3, box.w * 0.035);
+  const shadowBlur = 10;
+  const headRadius = box.w * 0.09;
+  const inkMargin = lineWidth / 2 + shadowBlur + headRadius + 4;
+  const pad = inkMargin / Math.min(box.w, box.h);
+
   for (const pose of cp.POSES) {
     const fig = buildPoseFigure(pose.angles);
     const all = [];
     for (const [a, b] of fig.bones) all.push(a, b);
     all.push(fig.head);
-    const { points } = fitToBox(all, box, 0.16);
+    const { points } = fitToBox(all, box, pad);
     for (const p of points) {
-      assert.ok(
-        p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h,
-        `Pose "${pose.name}" has a point outside the box: (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`
-      );
+      // every joint must be at least inkMargin away from each edge, so the
+      // drawn stroke/glow/head-circle stays inside the box.
+      assert.ok(p.x >= box.x + inkMargin - 0.5, `"${pose.name}" too far left (x=${p.x.toFixed(1)})`);
+      assert.ok(p.x <= box.x + box.w - inkMargin + 0.5, `"${pose.name}" too far right (x=${p.x.toFixed(1)})`);
+      assert.ok(p.y >= box.y + inkMargin - 0.5, `"${pose.name}" too high (y=${p.y.toFixed(1)}, top+margin=${(box.y + inkMargin).toFixed(1)})`);
+      assert.ok(p.y <= box.y + box.h - inkMargin + 0.5, `"${pose.name}" too low (y=${p.y.toFixed(1)})`);
     }
   }
 });
