@@ -7,8 +7,9 @@
 // respawns. No losing — just keep rescuing. Cooperative and endless.
 
 import {
-  buildPlatforms, buildFloor, stepMan, isRescued, hasFallenOut,
+  buildPlatforms, buildFloor, stepMan, isRescued, hasFallenOut, smooth,
 } from "./bridge-physics.js";
+import { KP_MIN } from "./lib.js";
 import {
   makeSparkles, spawnSparkles, updateSparkles, drawSparkles,
 } from "./lib.js";
@@ -27,6 +28,7 @@ export default {
     this.sparkles = makeSparkles();
     this.rescued = 0;
     this.spawnTimer = 0;
+    this._handState = {}; // smoothed wrist positions, keyed by dancer+hand
     this._layoutFor(ctx.canvas.width, ctx.canvas.height);
   },
 
@@ -35,8 +37,9 @@ export default {
     // re-layout if canvas size changed (e.g. adaptive perf switched resolution)
     if (this._w !== W || this._h !== H) this._layoutFor(W, H);
 
-    // platforms = floor chunks + the dancers' hands (stepping stones)
-    const platforms = buildPlatforms(this.floor, dancers, this.handHalfWidth);
+    // Smooth the hands first to damp jitter, THEN build platforms from them.
+    const smoothed = this._smoothHands(dancers);
+    const platforms = buildPlatforms(this.floor, smoothed, this.handHalfWidth);
 
     // spawn men
     this.spawnTimer -= dt;
@@ -92,7 +95,32 @@ export default {
   },
 
   _spawnMan() {
-    return { x: 20, y: this.groundY, vy: 0, state: "walking", standingOn: "floor" };
+    return { x: 20, y: this.groundY, vy: 0, state: "walking", standingOn: "floor", coyote: 0.28 };
+  },
+
+  // Return dancers whose wrist positions are low-pass filtered across frames, so
+  // MoveNet jitter / natural hand shake doesn't make the bridges wobble. Keeps
+  // per-(dancer,hand) smoothed coords in this._handState.
+  _smoothHands(dancers) {
+    const seen = new Set();
+    const out = dancers.map((d) => {
+      const kp = { ...d.keypoints };
+      for (const hand of ["leftWrist", "rightWrist"]) {
+        const w = d.keypoints[hand];
+        const key = `${d.id}:${hand}`;
+        if (!w || w.score < KP_MIN) { delete this._handState[key]; continue; }
+        seen.add(key);
+        const prev = this._handState[key];
+        const sx = smooth(prev?.x, w.x, 0.4);
+        const sy = smooth(prev?.y, w.y, 0.4);
+        this._handState[key] = { x: sx, y: sy };
+        kp[hand] = { x: sx, y: sy, score: w.score };
+      }
+      return { ...d, keypoints: kp };
+    });
+    // forget hands that disappeared so they re-init cleanly next time
+    for (const k of Object.keys(this._handState)) if (!seen.has(k)) delete this._handState[k];
+    return out;
   },
 
   // --- drawing -------------------------------------------------------------

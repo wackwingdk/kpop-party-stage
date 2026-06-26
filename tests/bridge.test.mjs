@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  findSupport, stepMan, isRescued, hasFallenOut, buildPlatforms, buildFloor,
+  findSupport, stepMan, isRescued, hasFallenOut, buildPlatforms, buildFloor, smooth,
   GRAVITY, WALK_SPEED, SNAP_BAND,
 } from "../js/games/bridge-physics.js";
 
@@ -20,10 +20,10 @@ test("findSupport: man over a gap (no platform under feet) finds nothing", () =>
   assert.equal(findSupport(man, [p]), null);
 });
 
-test("findSupport: platform above the feet does NOT support (can't stand under it)", () => {
+test("findSupport: platform FAR above the feet does NOT support (beyond step-up)", () => {
   const man = { x: 50, y: 100, vy: 0 };
-  const above = floor(0, 100, 60); // y=60 is above feet at y=100
-  assert.equal(findSupport(man, [above]), null);
+  const wayAbove = floor(0, 100, 100 - 80); // 80px above → beyond STEP_UP, can't reach
+  assert.equal(findSupport(man, [wayAbove]), null);
 });
 
 test("findSupport: platform too far below is not caught", () => {
@@ -102,6 +102,22 @@ test("buildPlatforms: turns confident wrists into hand platforms", () => {
   assert.equal(hand.color, "#ff3ec8");
 });
 
+test("smooth: first sample initializes to the target", () => {
+  assert.equal(smooth(null, 100, 0.4), 100);
+  assert.equal(smooth(undefined, 50, 0.4), 50);
+});
+
+test("smooth: damps a jump toward the target (low-pass)", () => {
+  // jumping from 100 to 200 with alpha 0.4 should land partway (140), not 200
+  assert.ok(Math.abs(smooth(100, 200, 0.4) - 140) < 1e-9);
+});
+
+test("smooth: repeated application converges toward the target", () => {
+  let v = 0;
+  for (let i = 0; i < 50; i++) v = smooth(v, 100, 0.4);
+  assert.ok(Math.abs(v - 100) < 0.5, `should converge near 100, got ${v}`);
+});
+
 // BALANCE: every hole must be smaller than a hand bridge, at every canvas size,
 // so a single hand can always span a gap. This is the bug the user hit.
 test("buildFloor: every gap is smaller than a hand bridge (all sizes)", () => {
@@ -135,6 +151,37 @@ test("buildFloor: a hand centered on a gap bridges it (man crosses, doesn't fall
   const man = { x: gapCenter, y: groundY, vy: 0, state: "walking" };
   const next = stepMan(man, platforms, 0.05);
   assert.equal(next.state, "walking", "man should be held up by the hand bridge");
+});
+
+// FORGIVENESS #1: a man should be able to step UP onto a hand held a bit higher
+// than his feet (bridge height need not match the hole exactly).
+test("findSupport: catches a platform held moderately ABOVE the feet (step up)", () => {
+  const man = { x: 50, y: 100, vy: 0 };
+  const slightlyAbove = floor(0, 100, 100 - 30); // 30px above the feet
+  assert.equal(findSupport(man, [slightlyAbove]), slightlyAbove,
+    "a hand ~30px above should still catch the man (he steps up)");
+});
+
+// FORGIVENESS #2: coyote time — a man stays supported for a short grace period
+// when support briefly disappears (shaking hands), instead of instantly falling.
+test("stepMan: brief loss of support does NOT drop the man immediately (coyote)", () => {
+  // supported first to charge coyote
+  let m = { x: 50, y: 100, vy: 0, state: "walking" };
+  m = stepMan(m, [floor(0, 200, 100)], 0.016);
+  const yWhenSupported = m.y;
+  // now one frame with NO platforms (hand jittered away)
+  m = stepMan(m, [], 0.016);
+  assert.equal(m.state, "walking", "should still be walking during coyote grace");
+  assert.ok(Math.abs(m.y - yWhenSupported) < 1, "should not have dropped yet");
+});
+
+test("stepMan: sustained loss of support eventually falls (coyote expires)", () => {
+  let m = { x: 50, y: 100, vy: 0, state: "walking" };
+  m = stepMan(m, [floor(0, 200, 100)], 0.016); // charge coyote
+  // many frames with no support → grace runs out → falls
+  for (let i = 0; i < 40; i++) m = stepMan(m, [], 0.016);
+  assert.equal(m.state, "falling");
+  assert.ok(m.y > 100, "should be falling after coyote expires");
 });
 
 test("buildPlatforms: a man can stand on a hand platform", () => {
